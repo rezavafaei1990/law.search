@@ -73,6 +73,52 @@ body:not(.admin) .adm{display:none!important}
 button:disabled{opacity:.35;cursor:default}
 .rel-art{padding:8px 0;border-top:1px dashed var(--line)}.rel-art:first-child{border-top:0}
 @media(prefers-color-scheme:dark){.law{background:hsl(var(--h,190) 42% 38%)}.res{border-right-color:hsl(var(--h,190) 45% 52%)}.dot{background:hsl(var(--h,190) 45% 52%)}}
+
+/* ===== ظاهر: شیشه‌ای، فاصله‌ها، انیمیشن ===== */
+:root{--glass:rgba(255,255,255,.58);--glass-b:rgba(255,255,255,.75);--shadow:0 8px 30px rgba(15,76,92,.10);--shadow-h:0 14px 38px rgba(15,76,92,.18)}
+@media(prefers-color-scheme:dark){:root{--glass:rgba(22,36,41,.55);--glass-b:rgba(255,255,255,.10);--shadow:0 8px 30px rgba(0,0,0,.35);--shadow-h:0 14px 38px rgba(0,0,0,.5)}}
+body{background:
+ radial-gradient(800px 480px at 88% -8%,hsl(190 75% 78%/.55),transparent 62%),
+ radial-gradient(700px 460px at -8% 22%,hsl(265 70% 84%/.45),transparent 62%),
+ radial-gradient(820px 520px at 52% 112%,hsl(150 60% 80%/.40),transparent 62%),var(--bg);background-attachment:fixed}
+@media(prefers-color-scheme:dark){body{background:
+ radial-gradient(800px 480px at 88% -8%,hsl(190 70% 30%/.45),transparent 62%),
+ radial-gradient(700px 460px at -8% 22%,hsl(265 60% 32%/.40),transparent 62%),
+ radial-gradient(820px 520px at 52% 112%,hsl(150 55% 26%/.35),transparent 62%),var(--bg);background-attachment:fixed}}
+.wrap{padding-top:34px}
+h1{font-size:1.9rem;letter-spacing:-.3px;background:linear-gradient(90deg,var(--main),hsl(265 60% 55%));-webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block;animation:rise .5s ease both}
+.sub{animation:rise .5s .08s ease both}
+.search{background:var(--glass)!important;-webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);border:1px solid var(--glass-b);border-radius:20px;padding:8px!important;box-shadow:var(--shadow);margin-bottom:14px;transition:box-shadow .3s,transform .3s}
+.search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--main) 28%,transparent),var(--shadow-h);transform:translateY(-1px)}
+.search input{border:0!important;background:transparent!important;font-size:1.12rem;padding:14px 52px 14px 16px;-webkit-appearance:none;appearance:none;
+ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23788' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 16px center!important}
+.search input:focus{outline:none}
+.modes{gap:8px;margin:4px 0 14px}.modes b{margin-left:4px;color:var(--mute);font-weight:600}
+.modes label{padding:6px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--glass-b);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:all .2s}
+.modes label:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.modes label:has(input:checked){background:var(--main);color:var(--card);border-color:transparent;box-shadow:var(--shadow)}
+.modes input{display:none}
+select,button,.file{border-radius:12px;background:var(--glass);border:1px solid var(--glass-b);transition:transform .15s,box-shadow .2s,border-color .2s}
+button:not(:disabled):hover,.file:hover{transform:translateY(-1px);box-shadow:var(--shadow)}button:not(:disabled):active{transform:scale(.97)}
+.count{margin:6px 4px 14px}
+.res,.decision-search-result{background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-color:var(--glass-b);border-radius:18px;padding:18px 24px;margin-bottom:20px;box-shadow:var(--shadow);
+ animation:rise .45s var(--d,0ms) cubic-bezier(.2,.8,.2,1) both;transition:transform .25s,box-shadow .25s}
+.res:hover,.decision-search-result:hover{transform:translateY(-3px);box-shadow:var(--shadow-h)}
+.head{margin-bottom:8px;gap:10px}.num{font-size:1.15rem}
+.txt{line-height:2.1;margin:10px 0}.sec{margin-top:14px;padding-top:12px}
+.grp{border-radius:14px;margin:30px 0 14px;animation:rise .45s var(--d,0ms) ease both;box-shadow:var(--shadow)}
+.law{border-radius:999px;padding:1px 12px;box-shadow:0 2px 8px hsl(var(--h,190) 50% 30%/.35)}
+mark{background:linear-gradient(transparent 20%,var(--hl) 20%);border-radius:4px;padding:0 3px}
+.chip{background:var(--glass);border:1px solid var(--glass-b);padding:3px 14px}
+.empty{background:var(--glass);border-radius:18px;border-style:solid;border-color:var(--glass-b);padding:46px 16px;animation:rise .5s ease both}
+.empty:first-child:only-child{animation:rise .5s ease both,pulse 2.2s 1s ease-in-out infinite}
+.decision-inline{border-radius:12px;animation:pop .28s cubic-bezier(.2,.9,.3,1.2) both}
+.foot{opacity:.8}
+details.adm{margin:6px 0 12px;font-size:.88rem}details.adm summary{cursor:pointer;color:var(--mute)}.colbox{background:var(--glass);border-radius:12px;padding:8px 14px;margin:6px 0;line-height:1.8}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.96) translateY(-6px)}to{opacity:1;transform:none}}
+@keyframes pulse{50%{opacity:.65}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -88,6 +134,7 @@ button:disabled{opacity:.35;cursor:default}
     <button id="save" class="adm">ذخیره داده‌ها (data.bin)</button>
   </div>
   <div class="chips adm" id="chips"></div>
+  <details class="adm" id="colrep"><summary>گزارش ستون‌ها (نقش هر ستون در آخرین فایل‌های افزوده‌شده)</summary><div id="colrepBody"></div></details>
 
   <div class="search"><input id="q" type="search" placeholder="مثلاً: ماده 4 &nbsp;یا&nbsp; وصیت &nbsp;یا&nbsp; ماده 10 اراده" autofocus></div>
   <div class="modes"><b>جستجو در:</b>
@@ -106,7 +153,7 @@ button:disabled{opacity:.35;cursor:default}
 <script>
 const $=id=>document.getElementById(id);
 let DB=[]; let DECISIONS=[]; // آرای وحدت رویه بارگذاری‌شده
-let shown=100,mode='all',exactPath='',showAll=false;const INFO={};let TOPICS=[];
+let shown=100,mode='all',exactPath='',showAll=false;const INFO={};const COLS={};let TOPICS=[];
 
 /* ---------- نرمال‌سازی ---------- */
 function norm(s){
@@ -253,7 +300,8 @@ function parseSheet(grid,law){
     return o;
   }).filter(o=>(o.text||o.sections.length)&&nk(o.numText)!==nk(headers[d.num]));
   const info=`شماره: ${headers[d.num]||'نامشخص'} | متن: ${headers[d.text]||'نامشخص'} | سایر: ${[...d.path,...d.secs].map(i=>headers[i]).join('، ')}`;
-  return{rows,info};
+  const rl=headers.map((h,i)=>h+'  ←  '+(i===d.num?'شماره ماده':i===d.text?'متن ماده':d.path.includes(i)?'مسیر (باب/فصل)':'بخش جداگانه'));
+  return{rows,info,roles:rl};
 }
 async function readFile(f){
   await loadXLSX();const buf=await f.arrayBuffer();
@@ -264,7 +312,7 @@ async function readFile(f){
     const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
     const name=wb.SheetNames.length>1?law+' - '+sn:law;
     const r=parseSheet(grid,name);
-    all=all.concat(r.rows);if(r.info)infos.push(r.info);
+    all=all.concat(r.rows);if(r.info)infos.push(r.info);if(r.roles)COLS[law+(wb.SheetNames.length>1?' - '+sn:'')]=r.roles;
   });
   INFO[law]=infos.join(' // ');
   return all;
@@ -301,6 +349,8 @@ async function exportData(){
 
 /* ---------- رابط ---------- */
 function refreshMeta(){
+  const ce=Object.entries(COLS);
+  if($('colrepBody')){$('colrepBody').innerHTML=ce.map(([l,r])=>`<div class="colbox"><b>${esc(l)}</b>${r.map(x=>'<div>'+esc(x)+'</div>').join('')}</div>`).join('')||'<small>بعد از افزودن یک فایل اکسل، نقش هر ستون اینجا نشان داده می‌شود.</small>';if(ce.length)$('colrep').open=true;}
   DB.forEach(o=>hue(o.law));
   const laws=[...new Set(DB.map(o=>o.law))];
   const cur=$('lawSel').value;
@@ -455,7 +505,8 @@ function render(){
     const snippet=excerpt?`<div class="txt">${H(excerpt)}${d.text.length>320?'…':''}</div>`:'';
     return `<div class="decision-search-result"><div class="head"><span class="law">رأی وحدت رویه</span><span class="num">${disp(title)}</span></div>${d.date?`<div class="path">تاریخ: ${disp(d.date)}</div>`:''}${summary}${snippet}<button type="button" class="precedent-link" data-decision-number="${esc(d.number)}" data-decision-year="${esc(d.year)}" aria-expanded="false">نمایش متن کامل رأی</button></div>`;
   }).join('');
-  out.innerHTML=part+(ADMIN&&res.length>shown?`<button id="more">نمایش بیشتر مواد</button>`:'')+decisionPart+(ADMIN&&decisionResults.length>shown?`<button id="more-decisions">نمایش آرای بیشتر</button>`:'');
+  out.dataset.k=(+out.dataset.k||0)+1;out.innerHTML=part+(ADMIN&&res.length>shown?`<button id="more">نمایش بیشتر مواد</button>`:'')+decisionPart+(ADMIN&&decisionResults.length>shown?`<button id="more-decisions">نمایش آرای بیشتر</button>`:'');
+  [...out.children].forEach((c,i)=>c.style.setProperty('--d',Math.min(i,10)*45+'ms'));
 }
 
 /* ---------- رویدادها ---------- */
