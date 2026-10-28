@@ -219,7 +219,7 @@ function detect(headers,body){
   const path=[],secs=[];
   H.forEach((h,i)=>{
     if(!h||i===num||i===text)return;
-    if(PATH_KEYS.some(p=>h.includes(p))&&stat(i).avg<90)path.push(i);else secs.push(i);
+    if(PATH_KEYS.some(p=>h.includes(p))&&!/مرتبط|ارجاع/.test(h)&&stat(i).avg<90)path.push(i);else secs.push(i);
   });
   return{num,text,path,secs};
 }
@@ -323,32 +323,52 @@ function hue(law){const b=String(law).split(' - ')[0];if(!HUES.has(b))HUES.set(b
 
 /* ---------- ترتیب بخش‌ها: بند ← تبصره ← سایر ستون‌ها/مواد مرتبط ← آرای وحدت رویه ---------- */
 const isPrec=h=>/رأی|رای|آرا|وحدت\s*رویه/i.test(h);
-const isRel=h=>!isPrec(h)&&/مرتبط|ارجاع|مواد|ماده/.test(nk(h));
 const secRank=h=>isPrec(h)?3:/بند/.test(nk(h))?0:/تبصره/.test(nk(h))?1:2;
 const CUR={re:null};
 const curH=t=>{t=disp(t);return CUR.re?t.replace(CUR.re,'<mark>$1</mark>'):t;};
 const numLabel=o=>/ماده/.test(norm(o.numText))?o.numText:'ماده '+(o.numText||'؟');
 
-/* مواد مرتبط: هر «ماده N [نام قانون]» یک لینک است */
-function relHtml(value,curLaw){
-  const pieces=String(value).split(/[\n،,؛;]+/).map(x=>x.trim()).filter(Boolean);
-  let last='',out='';
-  pieces.forEach(p=>{
-    const n=norm(p),nums=n.match(/\d+/g)||[];
-    const hasKey=/ماده|مواد/.test(n);
-    const onlyNums=/^[\s\d]*(و[\s\d]*)*(مکرر)?\s*$/.test(n);
-    if(!nums.length||(!hasKey&&!onlyNums)){out+=`<div>${disp(p)}</div>`;return;}
-    const resid=p.replace(/مواد|ماده|مکرر|[0-9۰-۹٠-٩]+/g,' ').replace(/(^|\s)و(?=\s|$)/g,' ').replace(/\s+/g,' ').trim();
-    let hint=hasKey?norm(resid).replace(/(^|\s)(قانون|همین|این|فوق|مذکور)(?=\s|$)/g,' ').replace(/\s+/g,' ').trim():last;
-    if(hasKey)last=hint;
-    const lbl=hasKey||nums.length>1?resid:'';
-    out+='<div>'+nums.map(x=>`<button type="button" class="precedent-link" data-rel-num="${esc(x)}" data-rel-hint="${esc(hint)}" data-rel-law="${esc(curLaw)}" aria-expanded="false">${disp('ماده '+x+(resid?' '+resid:''))}</button>`).join(' ')+'</div>';
-  });
-  return `<div class="precedent-list">${out}</div>`;
+/* ---------- ارجاع به ماده: در هر ستون و هر متنی، فقط خود «ماده N» لینک می‌شود و بقیهٔ کلمات دست‌نخورده می‌مانند ---------- */
+const NUM='[0-9۰-۹٠-٩]+';
+const REFSRC='(ماده|مواد)\\s*('+NUM+'(?:\\s*مکرر)?(?:\\s*(?:،|,|و|تا|الی)\\s*'+NUM+'(?:\\s*مکرر)?)*)';
+// قانونِ مقصد را از کلمات بعد از شماره تشخیص می‌دهد: «تجارت»، «قانون صدور چک»، «این قانون»، یا بدون نام (همان قانون)
+function resolveLaws(after,curLaw){
+  const cut=after.split(/[\n،,؛;.()«»:]|ماده|مواد|تبصره|بند/)[0];
+  const ws=norm(cut).split(' ').filter(Boolean).slice(0,6);
+  if(!ws.length||/^(این|همین|فوق|مذکور|سابق|بالا)$/.test(ws[0]))return{laws:[curLaw]};
+  const laws=[...new Set(DB.map(o=>o.law))],lw=l=>norm(l).split(' ');
+  const tryP=(w,strict)=>{for(let k=Math.min(w.length,5);k>=1;k--){const pre=w.slice(0,k);if(pre.length===1&&pre[0]==='قانون')continue;
+    const m=laws.filter(l=>{const lx=lw(l);if(!strict)return pre.every(x=>lx.includes(x));
+      const lz=lx.filter((x,i)=>!(i===0&&x==='قانون'));return pre.every((x,j)=>lz[j]===x);});
+    if(m.length)return m;}return null;};
+  let m=tryP(ws);
+  if(!m&&ws[0]==='قانون')m=tryP(ws.slice(1),true);
+  if(m)return{laws:m};
+  if(ws[0]==='قانون'&&ws.length>1)return{laws:[],unknown:ws.slice(0,3).join(' ')};
+  return{laws:[curLaw]};
+}
+function refChunk(m,after,curLaw){
+  const info=resolveLaws(after,curLaw);
+  const btn=(label,tok)=>{const n=digits(tok[1]).replace(/\D/g,'');
+    return `<button type="button" class="precedent-link" data-rel-num="${esc(n)}" data-rel-mk="${tok[2]?1:0}" data-rel-laws="${esc(JSON.stringify(info.laws))}" data-rel-unknown="${esc(info.unknown||'')}" aria-expanded="false">${disp(label)}</button>`;};
+  const tr=new RegExp('('+NUM+')(\\s*مکرر)?','g'),toks=[...m[2].matchAll(tr)];
+  if(toks.length===1)return btn(m[0],toks[0]);
+  let out=disp(m[1])+' ',last=0;
+  toks.forEach(t=>{out+=disp(m[2].slice(last,t.index))+btn(t[0],t);last=t.index+t[0].length;});
+  return out+disp(m[2].slice(last));
+}
+function linkRefs(text,H,curLaw){
+  text=String(text);const re=new RegExp(REFSRC,'g');let out='',last=0,m;
+  while((m=re.exec(text))){
+    out+=H(text.slice(last,m.index));
+    const end=m.index+m[0].length;
+    out+=refChunk(m,text.slice(end,end+90),curLaw);last=end;
+  }
+  return out+H(text.slice(last));
 }
 function secHtml(o,H){
   return [...o.sections].sort((a,b)=>secRank(a.h)-secRank(b.h)).map(x=>{
-    const v=isPrec(x.h)?citationHtml(x.v):isRel(x.h)?relHtml(x.v,o.law):H(formatLegalText(x.v));
+    const v=isPrec(x.h)?citationHtml(x.v):linkRefs(formatLegalText(x.v),H,o.law);
     return `<div class="sec"><h4>${esc(x.h)}</h4><div class="txt">${v}</div></div>`;
   }).join('');
 }
@@ -358,10 +378,13 @@ function miniArticle(o){
 function toggleRelatedInline(btn){
   const old=btn.nextElementSibling;
   if(old&&old.classList.contains('related-inline')){old.remove();btn.setAttribute('aria-expanded','false');return;}
-  const num=btn.dataset.relNum,hw=(btn.dataset.relHint||'').split(' ').filter(Boolean),cur=btn.dataset.relLaw;
-  const c=DB.filter(o=>o.num===num&&(hw.length?hw.every(w=>norm(o.law).includes(w)):o.law===cur));
+  let laws=[];try{laws=JSON.parse(btn.dataset.relLaws||'[]');}catch(e){}
+  const num=btn.dataset.relNum,mk=btn.dataset.relMk==='1',unk=btn.dataset.relUnknown;
+  let c=DB.filter(o=>o.num===num&&laws.includes(o.law));
+  const exact=c.filter(o=>/مکرر/.test(norm(o.numText))===mk);if(exact.length)c=exact;
   const panel=document.createElement('div');panel.className='decision-inline related-inline';
-  panel.innerHTML=`<div class="decision-inline-head"><h3>${esc(btn.textContent)}</h3><button type="button" data-close-inline="1">بستن</button></div>`+(c.length?c.map(miniArticle).join(''):'<div class="path">ماده‌ای با این مشخصات در فایل‌های بارگذاری‌شده پیدا نشد.</div>');
+  const msg=unk?`«${disp(unk)}» در فایل‌های بارگذاری‌شده نیست.`:'ماده‌ای با این مشخصات در فایل‌های بارگذاری‌شده پیدا نشد.';
+  panel.innerHTML=`<div class="decision-inline-head"><h3>${esc(btn.textContent)}</h3><button type="button" data-close-inline="1">بستن</button></div>`+(c.length?c.map(miniArticle).join(''):`<div class="path">${msg}</div>`);
   btn.insertAdjacentElement('afterend',panel);btn.setAttribute('aria-expanded','true');
 }
 function cardHtml(i,grouped){
