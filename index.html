@@ -227,7 +227,7 @@ function toggleDecisionInline(button,number,year){
 async function readDecisionFile(file){
   await loadXLSX();const wb=XLSX.read(await file.arrayBuffer(),{type:'array'}); let added=[];
   wb.SheetNames.forEach(sn=>{
-    const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()!==''));
+    const grid=XLSX.utils.sheet_to_json(fixRef(wb.Sheets[sn]),{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()!==''));
     if(grid.length<2)return;
     let hi=0,best=0;grid.slice(0,10).forEach((r,i)=>{const n=r.filter(c=>String(c).trim()!=='').length;if(n>best){best=n;hi=i;}});
     const headers=grid[hi].map(x=>norm(x).replace(/[\s_\/]/g,''));
@@ -268,7 +268,7 @@ function detect(headers,body){
   H.forEach((h,i)=>{
     if(!h||i===num||i===text)return;
     const fillR=body.length?body.filter(r=>!/^[-–—_.\s]*$/.test(String(r[i]??''))).length/body.length:0;
-    const isPath=PATH_CORE.some(p=>h.includes(p))||(PATH_SOFT.some(p=>h.includes(p))&&fillR>=.6);
+    const isPath=(PATH_CORE.some(p=>h.includes(p))&&(num<0||i<num))||(PATH_SOFT.some(p=>h.includes(p))&&fillR>=.6);
     if(isPath&&!/مرتبط|ارجاع/.test(h)&&stat(i).avg<90)path.push(i);else secs.push(i);
   });
   return{num,text,path,secs};
@@ -300,8 +300,15 @@ function parseSheet(grid,law){
     return o;
   }).filter(o=>(o.text||o.sections.length)&&nk(o.numText)!==nk(headers[d.num]));
   const info=`شماره: ${headers[d.num]||'نامشخص'} | متن: ${headers[d.text]||'نامشخص'} | سایر: ${[...d.path,...d.secs].map(i=>headers[i]).join('، ')}`;
-  const rl=headers.map((h,i)=>h+'  ←  '+(i===d.num?'شماره ماده':i===d.text?'متن ماده':d.path.includes(i)?'مسیر (باب/فصل)':'بخش جداگانه'));
+  const smp=i=>{const r=body.find(x=>!PHC.test(String(x[i]??'')));return r?String(r[i]).trim().slice(0,28):'(خالی)';};
+  const rl=['تعداد ستون‌های خوانده‌شده: '+W,...headers.map((h,i)=>h+'  ←  '+(i===d.num?'شماره ماده':i===d.text?'متن ماده':d.path.includes(i)?'مسیر (باب/فصل)':'بخش جداگانه')+'   | نمونه: '+smp(i))];
   return{rows,info,roles:rl};
+}
+function fixRef(ws){
+  if(!ws)return ws;const r=ws['!ref']?XLSX.utils.decode_range(ws['!ref']):{s:{r:0,c:0},e:{r:0,c:0}};
+  Object.keys(ws).forEach(k=>{if(k[0]==='!')return;const c=XLSX.utils.decode_cell(k);
+    if(c.c>r.e.c)r.e.c=c.c;if(c.r>r.e.r)r.e.r=c.r;if(c.c<r.s.c)r.s.c=c.c;if(c.r<r.s.r)r.s.r=c.r;});
+  ws['!ref']=XLSX.utils.encode_range(r);return ws;
 }
 async function readFile(f){
   await loadXLSX();const buf=await f.arrayBuffer();
@@ -309,7 +316,7 @@ async function readFile(f){
   const law=f.name.replace(/\.[^.]+$/,'').replace(/_/g,' ');
   let all=[],infos=[];
   wb.SheetNames.forEach(sn=>{
-    const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+    const grid=XLSX.utils.sheet_to_json(fixRef(wb.Sheets[sn]),{header:1,defval:''});
     const name=wb.SheetNames.length>1?law+' - '+sn:law;
     const r=parseSheet(grid,name);
     all=all.concat(r.rows);if(r.info)infos.push(r.info);if(r.roles)COLS[law+(wb.SheetNames.length>1?' - '+sn:'')]=r.roles;
@@ -387,7 +394,7 @@ const numLabel=o=>/ماده/.test(norm(o.numText))?o.numText:'ماده '+(o.numT
 
 /* ---------- ارجاع به ماده: در هر ستون و هر متنی، فقط خود «ماده N» لینک می‌شود و بقیهٔ کلمات دست‌نخورده می‌مانند ---------- */
 const NUM='[0-9۰-۹٠-٩]+';
-const REFSRC='(ماده|مواد)\\s*('+NUM+'(?:\\s*مکرر)?(?:\\s*(?:،|,|و|تا|الی)\\s*'+NUM+'(?:\\s*مکرر)?)*)';
+const REFSRC='(ماده|مواد)\\s*\\(?\\s*('+NUM+'(?:\\s*مکرر)?(?:\\s*(?:،|,|و|تا|الی)\\s*'+NUM+'(?:\\s*مکرر)?)*)(?:\\s*\\))?';
 // قانونِ مقصد را از کلمات بعد از شماره تشخیص می‌دهد: «تجارت»، «قانون صدور چک»، «این قانون»، یا بدون نام (همان قانون)
 function resolveLaws(after,curLaw){
   const cut=after.split(/[\n،,؛;.()«»:]|ماده|مواد|تبصره|بند/)[0];
@@ -430,7 +437,7 @@ function secHtml(o,H){
   }).join('');
 }
 function miniArticle(o){
-  return `<div class="rel-art" style="--h:${hue(o.law)}"><div class="head"><span class="law">${esc(o.law)}</span><span class="num">${disp(numLabel(o))}</span></div>${o.path.length?`<div class="path">${disp(o.path.join(' › '))}</div>`:''}<div class="txt">${disp(formatLegalText(o.text))}</div>${secHtml(o,disp)}</div>`;
+  return `<div class="rel-art" style="--h:${hue(o.law)}"><div class="head"><span class="law">${esc(o.law)}</span><span class="num">${disp(numLabel(o))}</span></div>${o.path.length?`<div class="path">${disp(o.path.join(' › '))}</div>`:''}<div class="txt">${linkRefs(formatLegalText(o.text),disp,o.law)}</div>${secHtml(o,disp)}</div>`;
 }
 function toggleRelatedInline(btn){
   const old=btn.nextElementSibling;
@@ -451,7 +458,7 @@ function cardHtml(i,grouped){
   return `<div class="res" data-i="${i}" data-g="${grouped?1:0}" style="--h:${hue(o.law)}"><div class="head"><span class="law">${esc(o.law)}</span>
     <span class="num">${disp(numLabel(o))}</span>
     <span class="nav"><button type="button" data-nav="-1" ${hasP?'':'disabled'} title="ماده قبل">→ قبلی</button><button type="button" data-nav="1" ${hasN?'':'disabled'} title="ماده بعد">بعدی ←</button><button type="button" class="copy" data-i="${i}">کپی</button></span></div>
-    ${pathHtml}<div class="txt">${H(formatLegalText(o.text))}</div>${secHtml(o,H)}</div>`;
+    ${pathHtml}<div class="txt">${linkRefs(formatLegalText(o.text),H,o.law)}</div>${secHtml(o,H)}</div>`;
 }
 
 function render(){
