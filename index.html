@@ -64,6 +64,15 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 
 body:not(.admin) .adm{display:none!important}
 .foot{text-align:center;color:var(--mute);font-size:.8rem;margin-top:30px}
+.law{background:hsl(var(--h,190) 50% 30%);color:#fff}
+.res{border-right-color:hsl(var(--h,190) 50% 36%)}
+.dot{display:inline-block;width:.75em;height:.75em;border-radius:50%;background:hsl(var(--h,190) 50% 40%);margin-left:6px;vertical-align:baseline}
+.decision-search-result .law{background:#6b5b95}
+.nav{margin-right:auto;display:flex;gap:6px}
+.nav button{font-size:.78rem;padding:1px 10px;margin:0}
+button:disabled{opacity:.35;cursor:default}
+.rel-art{padding:8px 0;border-top:1px dashed var(--line)}.rel-art:first-child{border-top:0}
+@media(prefers-color-scheme:dark){.law{background:hsl(var(--h,190) 42% 38%)}.res{border-right-color:hsl(var(--h,190) 45% 52%)}.dot{background:hsl(var(--h,190) 45% 52%)}}
 </style>
 </head>
 <body>
@@ -85,6 +94,7 @@ body:not(.admin) .adm{display:none!important}
     <label><input type="radio" name="mode" value="all" checked> همه (متن و موضوع)</label>
     <label><input type="radio" name="mode" value="text"> فقط متن ماده</label>
     <label><input type="radio" name="mode" value="topic"> فقط موضوع (باب / فصل / مبحث)</label>
+    <label><input type="radio" name="mode" value="decision"> آرای وحدت رویه</label>
     <button id="all" class="adm">نمایش کل مواد</button>
   </div>
   <div class="chips" id="pathchip"></div>
@@ -158,7 +168,7 @@ function toggleDecisionInline(button,number,year){
   const old=button.nextElementSibling;
   if(old&&old.classList.contains('decision-inline')){old.remove();button.setAttribute('aria-expanded','false');return;}
   // Close any other expanded decision to keep the result list compact.
-  document.querySelectorAll('.decision-inline').forEach(el=>el.remove());
+  document.querySelectorAll('.decision-inline:not(.related-inline)').forEach(el=>{if(!el.contains(button))el.remove();});
   document.querySelectorAll('[data-decision-number][aria-expanded="true"]').forEach(el=>el.setAttribute('aria-expanded','false'));
   const key=decisionKey(number,year);
   const d=DECISIONS.find(x=>decisionKey(x.number,x.year)===key);
@@ -198,11 +208,13 @@ function detect(headers,body){
     return{n:v.length,avg:v.length?v.reduce((a,x)=>a+x.length,0)/v.length:0,
       numeric:v.length?v.filter(x=>/^\D{0,6}\d{1,4}\D{0,8}$/.test(norm(x))).length/v.length:0};};
   let num=pick(h=>h.includes('شمارهماده'));
-  if(num<0)num=pick(h=>h.includes('شماره'));
-  if(num<0)num=pick(h=>h==='ماده'||(h.includes('ماده')&&!h.includes('متن')));
+  if(num<0)num=pick(h=>h.includes('شماره')&&!/رای|رأی|وحدت|تبصره|بند|ردیف/.test(h));
+  if(num<0)num=pick(h=>h==='ماده'||(h.includes('ماده')&&!h.includes('متن')&&!/مرتبط|ارجاع|مواد/.test(h)));
   if(num<0){let best=-1,bs=0;H.forEach((h,i)=>{const st=stat(i);if(st.numeric>.8&&st.avg<12&&st.n>bs){best=i;bs=st.n;}});num=best;}
-  let text=pick((h,i)=>i!==num&&h.includes('متن'));
-  if(text<0)text=pick((h,i)=>i!==num&&h.includes('ماده'));
+  let text=pick((h,i)=>i!==num&&h.includes('متنماده'));
+  if(text<0)text=pick((h,i)=>i!==num&&h.includes('متن')&&!/رای|رأی|توضیح|شرح|نظر/.test(h));
+  if(text<0)text=pick((h,i)=>i!==num&&h.includes('متن'));
+  if(text<0)text=pick((h,i)=>i!==num&&h.includes('ماده')&&!/مرتبط|ارجاع|مواد/.test(h));
   if(text<0){let best=-1,ba=0;H.forEach((h,i)=>{if(i===num)return;const st=stat(i);if(st.avg>ba){best=i;ba=st.avg;}});text=best;}
   const path=[],secs=[];
   H.forEach((h,i)=>{
@@ -282,11 +294,12 @@ async function exportData(){
 
 /* ---------- رابط ---------- */
 function refreshMeta(){
+  DB.forEach(o=>hue(o.law));
   const laws=[...new Set(DB.map(o=>o.law))];
   const cur=$('lawSel').value;
   $('lawSel').innerHTML='<option value="">همه قوانین</option>'+laws.map(l=>`<option>${esc(l)}</option>`).join('');
   if(laws.includes(cur))$('lawSel').value=cur;
-  $('chips').innerHTML=laws.map(l=>`<span class="chip" title="${esc(INFO[l.split(' - ')[0]]||'')}"><b>${esc(l)}</b> (${persianDigits(DB.filter(o=>o.law===l).length)} ماده)<button class="viewall" data-view="${esc(l)}">مشاهده کل</button><i data-law="${esc(l)}" title="حذف">✕</i></span>`).join('');
+  $('chips').innerHTML=laws.map(l=>`<span class="chip" title="${esc(INFO[l.split(' - ')[0]]||'')}"><span class="dot" style="--h:${hue(l)}"></span><b>${esc(l)}</b> (${persianDigits(DB.filter(o=>o.law===l).length)} ماده)<button class="viewall" data-view="${esc(l)}">مشاهده کل</button><i data-law="${esc(l)}" title="حذف">✕</i></span>`).join('');
 }
 function parseQuery(q){
   q=norm(q);
@@ -304,6 +317,63 @@ function hlRe(words){
   const p=words.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ی/g,'[یيى]').replace(/ک/g,'[کك]'));
   return new RegExp('('+p.join('|')+')','gi');
 }
+/* ---------- رنگ هر قانون (خودکار، برای هر تعداد فایل) ---------- */
+const HUES=new Map();
+function hue(law){const b=String(law).split(' - ')[0];if(!HUES.has(b))HUES.set(b,Math.round((HUES.size*137.508+200)%360));return HUES.get(b);}
+
+/* ---------- ترتیب بخش‌ها: بند ← تبصره ← سایر ستون‌ها/مواد مرتبط ← آرای وحدت رویه ---------- */
+const isPrec=h=>/رأی|رای|آرا|وحدت\s*رویه/i.test(h);
+const isRel=h=>!isPrec(h)&&/مرتبط|ارجاع|مواد|ماده/.test(nk(h));
+const secRank=h=>isPrec(h)?3:/بند/.test(nk(h))?0:/تبصره/.test(nk(h))?1:2;
+const CUR={re:null};
+const curH=t=>{t=disp(t);return CUR.re?t.replace(CUR.re,'<mark>$1</mark>'):t;};
+const numLabel=o=>/ماده/.test(norm(o.numText))?o.numText:'ماده '+(o.numText||'؟');
+
+/* مواد مرتبط: هر «ماده N [نام قانون]» یک لینک است */
+function relHtml(value,curLaw){
+  const pieces=String(value).split(/[\n،,؛;]+/).map(x=>x.trim()).filter(Boolean);
+  let last='',out='';
+  pieces.forEach(p=>{
+    const n=norm(p),nums=n.match(/\d+/g)||[];
+    const hasKey=/ماده|مواد/.test(n);
+    const onlyNums=/^[\s\d]*(و[\s\d]*)*(مکرر)?\s*$/.test(n);
+    if(!nums.length||(!hasKey&&!onlyNums)){out+=`<div>${disp(p)}</div>`;return;}
+    const resid=p.replace(/مواد|ماده|مکرر|[0-9۰-۹٠-٩]+/g,' ').replace(/(^|\s)و(?=\s|$)/g,' ').replace(/\s+/g,' ').trim();
+    let hint=hasKey?norm(resid).replace(/(^|\s)(قانون|همین|این|فوق|مذکور)(?=\s|$)/g,' ').replace(/\s+/g,' ').trim():last;
+    if(hasKey)last=hint;
+    const lbl=hasKey||nums.length>1?resid:'';
+    out+='<div>'+nums.map(x=>`<button type="button" class="precedent-link" data-rel-num="${esc(x)}" data-rel-hint="${esc(hint)}" data-rel-law="${esc(curLaw)}" aria-expanded="false">${disp('ماده '+x+(resid?' '+resid:''))}</button>`).join(' ')+'</div>';
+  });
+  return `<div class="precedent-list">${out}</div>`;
+}
+function secHtml(o,H){
+  return [...o.sections].sort((a,b)=>secRank(a.h)-secRank(b.h)).map(x=>{
+    const v=isPrec(x.h)?citationHtml(x.v):isRel(x.h)?relHtml(x.v,o.law):H(formatLegalText(x.v));
+    return `<div class="sec"><h4>${esc(x.h)}</h4><div class="txt">${v}</div></div>`;
+  }).join('');
+}
+function miniArticle(o){
+  return `<div class="rel-art" style="--h:${hue(o.law)}"><div class="head"><span class="law">${esc(o.law)}</span><span class="num">${disp(numLabel(o))}</span></div>${o.path.length?`<div class="path">${disp(o.path.join(' › '))}</div>`:''}<div class="txt">${disp(formatLegalText(o.text))}</div>${secHtml(o,disp)}</div>`;
+}
+function toggleRelatedInline(btn){
+  const old=btn.nextElementSibling;
+  if(old&&old.classList.contains('related-inline')){old.remove();btn.setAttribute('aria-expanded','false');return;}
+  const num=btn.dataset.relNum,hw=(btn.dataset.relHint||'').split(' ').filter(Boolean),cur=btn.dataset.relLaw;
+  const c=DB.filter(o=>o.num===num&&(hw.length?hw.every(w=>norm(o.law).includes(w)):o.law===cur));
+  const panel=document.createElement('div');panel.className='decision-inline related-inline';
+  panel.innerHTML=`<div class="decision-inline-head"><h3>${esc(btn.textContent)}</h3><button type="button" data-close-inline="1">بستن</button></div>`+(c.length?c.map(miniArticle).join(''):'<div class="path">ماده‌ای با این مشخصات در فایل‌های بارگذاری‌شده پیدا نشد.</div>');
+  btn.insertAdjacentElement('afterend',panel);btn.setAttribute('aria-expanded','true');
+}
+function cardHtml(i,grouped){
+  const o=DB[i],H=curH;
+  const hasP=i>0&&DB[i-1].law===o.law,hasN=i<DB.length-1&&DB[i+1].law===o.law;
+  const pathHtml=(!grouped&&o.path.length)?`<div class="path"><a data-pi="${i}" title="نمایش همه مواد این موضوع">${H(o.path.join(' › '))}</a></div>`:'';
+  return `<div class="res" data-i="${i}" data-g="${grouped?1:0}" style="--h:${hue(o.law)}"><div class="head"><span class="law">${esc(o.law)}</span>
+    <span class="num">${disp(numLabel(o))}</span>
+    <span class="nav"><button type="button" data-nav="-1" ${hasP?'':'disabled'} title="ماده قبل">→ قبلی</button><button type="button" data-nav="1" ${hasN?'':'disabled'} title="ماده بعد">بعدی ←</button><button type="button" class="copy" data-i="${i}">کپی</button></span></div>
+    ${pathHtml}<div class="txt">${H(formatLegalText(o.text))}</div>${secHtml(o,H)}</div>`;
+}
+
 function render(){
   const {num,words}=parseQuery($('q').value);
   const law=$('lawSel').value,out=$('out');
@@ -322,38 +392,33 @@ function render(){
       out.innerHTML=TOPICS.length?TOPICS.map((k,i)=>`<button class="topic" data-t="${i}">${disp(law?lbl(k).split(' › ').slice(1).join(' › '):lbl(k))} <small>(${persianDigits(m.get(k))} ماده)</small></button>`).join(''):'<div class="empty">در این فایل‌ها ستون باب/فصل/مبحث پیدا نشد.</div>';
     }else{
       $('count').textContent=persianDigits(inLaw.length)+' ماده بارگذاری شده است.';
-      out.innerHTML='<div class="empty">شماره ماده (مثلاً ماده ۴) یا یک کلمه را برای جستجو بنویسید.</div>';
+      out.innerHTML='<div class="empty">'+(mode==='decision'?'شماره رأی، سال یا کلمه‌ای از متن رأی را بنویسید.':'شماره ماده (مثلاً ماده ۴) یا یک کلمه را برای جستجو بنویسید.')+'</div>';
     }
     return;
   }
   const f={all:'norm',text:'tn',topic:'pn'}[mode];
-  const res=inLaw.filter(o=>(!exactPath||pk(o)===exactPath)&&(num===null||o.num===num)&&words.every(w=>(o[f]||'').includes(w)));
-  // رأی‌ها هم در جستجو شرکت می‌کنند: شماره، سال، موضوع و متن کامل.
-  const decisionResults=DECISIONS.filter(d=>{
-    const corpus=norm(['رای','رأی','وحدت رویه','شماره',d.number,'سال',d.year,d.date,d.subject,d.text].join(' '));
-    if(num!==null&&!words.length)return digits(d.number).replace(/\D/g,'')===num||digits(d.year).replace(/\D/g,'')===num;
-    if(num!==null&&!words.every(w=>corpus.includes(w)))return false;
-    return words.every(w=>corpus.includes(w))&&(num===null||corpus.includes(num));
-  });
-  $('count').textContent=persianDigits(res.length+decisionResults.length)+' نتیجه ('+persianDigits(res.length)+' ماده، '+persianDigits(decisionResults.length)+' رأی)'+(!ADMIN&&(res.length>50||decisionResults.length>50)?' — ۵۰ مورد اول هر بخش نمایش داده شد؛ جستجو را دقیق‌تر کنید':'');
+  const dec=mode==='decision';
+  const res=dec?[]:inLaw.filter(o=>(!exactPath||pk(o)===exactPath)&&(num===null||o.num===num)&&words.every(w=>(o[f]||'').includes(w)));
+  // رأی‌ها فقط در حالت «آرای وحدت رویه» جستجو می‌شوند
+  const decisionResults=dec?DECISIONS.filter(d=>{
+    const dn=digits(d.number).replace(/\D/g,''),dy=digits(d.year).replace(/\D/g,'');
+    if(num!==null&&dn!==num&&dy!==num)return false;
+    const corpus=norm([d.number,d.year,d.date,d.subject,d.text].join(' '));
+    return words.every(w=>corpus.includes(w));
+  }):[];
+  const cap=ADMIN?shown:50;
+  $('count').textContent=persianDigits(dec?decisionResults.length+' رأی':res.length+' نتیجه')+(!ADMIN&&(res.length>50||decisionResults.length>50)?' — ۵۰ مورد اول نمایش داده شد؛ جستجو را دقیق‌تر کنید':'');
   if(!res.length&&!decisionResults.length){out.innerHTML='<div class="empty">نتیجه‌ای پیدا نشد. عبارت کوتاه‌تر را امتحان کنید یا نوع جستجو را عوض کنید.</div>';return;}
-  const re=hlRe(words);
-  const H=s=>{s=disp(s);return re?s.replace(re,'<mark>$1</mark>'):s;};
+  CUR.re=hlRe(words);const H=curH;
   const grouped=mode==='topic'||!!exactPath||(SA&&!!law);
   const gc={};if(grouped)res.forEach(o=>{const k=pk(o);gc[k]=(gc[k]||0)+1;});
   let prev=null;
-  const part=res.slice(0,ADMIN?shown:50).map(o=>{
+  const part=res.slice(0,cap).map(o=>{
     const k=pk(o);let g='';
-    if(grouped&&k!==prev){prev=k;g=`<div class="grp"><span class="law">${esc(o.law)}</span> ${H(o.path.join(' › ')||'بدون موضوع')} <small>(${gc[k]} ماده)</small></div>`;}
-    const pathHtml=(!grouped&&o.path.length)?`<div class="path"><a data-pi="${DB.indexOf(o)}" title="نمایش همه مواد این موضوع">${H(o.path.join(' › '))}</a></div>`:'';
-    return g+`<div class="res"><div class="head"><span class="law">${esc(o.law)}</span>
-      <span class="num">${disp(/ماده/.test(norm(o.numText))?o.numText:'ماده '+(o.numText||'؟'))}</span>
-      <button class="copy" data-i="${DB.indexOf(o)}">کپی</button></div>
-      ${pathHtml}
-      <div class="txt">${H(formatLegalText(o.text))}</div>
-      ${o.sections.map(x=>{const precedent=/رأی|رای|آرا|وحدت\s*رویه/i.test(x.h);const value=precedent?citationHtml(x.v):H(formatLegalText(x.v));return `<div class="sec"><h4>${esc(x.h)}</h4><div class="txt">${precedent?value:value}</div></div>`;}).join('')}</div>`;
+    if(grouped&&k!==prev){prev=k;g=`<div class="grp" style="--h:${hue(o.law)}"><span class="law">${esc(o.law)}</span> ${H(o.path.join(' › ')||'بدون موضوع')} <small>(${persianDigits(gc[k])} ماده)</small></div>`;}
+    return g+cardHtml(DB.indexOf(o),grouped);
   }).join('');
-  const decisionPart=decisionResults.slice(0,ADMIN?shown:50).map(d=>{
+  const decisionPart=decisionResults.slice(0,cap).map(d=>{
     const title=`رأی وحدت رویه شماره ${d.number} - سال ${d.year}`;
     const summary=d.subject?`<div class="path">${H(d.subject)}</div>`:'';
     const excerpt=String(d.text||'').slice(0,320);
@@ -404,6 +469,10 @@ $('chips').addEventListener('click',async e=>{
   DB=DB.filter(o=>o.law!==l);await save();refreshMeta();render();
 });
 $('out').addEventListener('click',e=>{
+  const nb=e.target.closest('[data-nav]');
+  if(nb){if(!nb.disabled){const card=nb.closest('.res');const ni=+card.dataset.i+ +nb.dataset.nav;if(DB[ni])card.outerHTML=cardHtml(ni,card.dataset.g==='1');}return;}
+  const rb=e.target.closest('[data-rel-num]');
+  if(rb){toggleRelatedInline(rb);return;}
   if(e.target.id==='more'){shown+=100;render();return;}
   const t=e.target.closest('[data-t],[data-pi]');
   if(t){const o=t.dataset.pi!==undefined?DB[t.dataset.pi]:null;
