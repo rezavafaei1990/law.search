@@ -199,7 +199,8 @@ async function readDecisionFile(file){
 }
 
 /* ---------- خواندن اکسل (تشخیص خودکار ستون‌ها) ---------- */
-const PATH_KEYS=['باب','مبحث','فصل','بخش','کتاب','گفتار','قسمت','عنوان','موضوع'];
+const PATH_CORE=['باب','مبحث','فصل','بخش','کتاب','گفتار','قسمت'];
+const PATH_SOFT=['عنوان','موضوع'];
 const nk=k=>norm(k).replace(/\s|\//g,'');
 function detect(headers,body){
   const H=headers.map(nk);
@@ -219,17 +220,23 @@ function detect(headers,body){
   const path=[],secs=[];
   H.forEach((h,i)=>{
     if(!h||i===num||i===text)return;
-    if(PATH_KEYS.some(p=>h.includes(p))&&!/مرتبط|ارجاع/.test(h)&&stat(i).avg<90)path.push(i);else secs.push(i);
+    const fillR=body.length?body.filter(r=>!/^[-–—_.\s]*$/.test(String(r[i]??''))).length/body.length:0;
+    const isPath=PATH_CORE.some(p=>h.includes(p))||(PATH_SOFT.some(p=>h.includes(p))&&fillR>=.6);
+    if(isPath&&!/مرتبط|ارجاع/.test(h)&&stat(i).avg<90)path.push(i);else secs.push(i);
   });
   return{num,text,path,secs};
 }
 function parseSheet(grid,law){
   grid=grid.filter(r=>r.some(c=>String(c).trim()!==''));
   if(grid.length<2)return{rows:[],info:null};
-  // ردیف سرستون: پرترین ردیف بین ۱۰ ردیف اول
-  let hi=0,bc=0;
-  grid.slice(0,10).forEach((r,i)=>{const c=r.filter(x=>String(x).trim()!=='').length;if(c>bc){bc=c;hi=i;}});
-  const headers=grid[hi].map((h,i)=>String(h).trim()||('ستون '+(i+1)));
+  // ردیف سرستون: ردیفی (بین ۱۰ ردیف اول) که بیشترین کلمهٔ سرستونی (شماره، متن، باب، فصل، بند، تبصره، ...) دارد
+  const KW=/شماره|متن|ماده|باب|مبحث|فصل|بخش|بند|تبصره|رأی|رای|وحدت|کتاب|گفتار|مرتبط|عنوان|موضوع|قاعده|نکته|توضیح/;
+  const PHC=/^[-–—_.\s]*$/;
+  let hi=-1,bs=0;
+  grid.slice(0,10).forEach((r,i)=>{const sc=r.filter(c=>String(c).length<45&&KW.test(norm(c))).length;if(sc>bs){bs=sc;hi=i;}});
+  if(hi<0){let bc=0;hi=0;grid.slice(0,10).forEach((r,i)=>{const c=r.filter(x=>!PHC.test(String(x))).length;if(c>bc){bc=c;hi=i;}});}
+  const W=Math.max(...grid.slice(0,400).map(r=>r.length));
+  const headers=Array.from({length:W},(_,i)=>String(grid[hi][i]??'').trim()||('ستون '+(i+1)));
   const body=grid.slice(hi+1);
   const d=detect(headers,body);
   const last={};
