@@ -267,8 +267,7 @@ function detect(headers,body){
   const path=[],secs=[];
   H.forEach((h,i)=>{
     if(!h||i===num||i===text)return;
-    const fillR=body.length?body.filter(r=>!/^[-–—_.\s]*$/.test(String(r[i]??''))).length/body.length:0;
-    const isPath=(PATH_CORE.some(p=>h.includes(p))&&(num<0||i<num))||(PATH_SOFT.some(p=>h.includes(p))&&fillR>=.6);
+    const isPath=PATH_CORE.some(p=>h.includes(p))&&(num<0||i<num);
     if(isPath&&!/مرتبط|ارجاع/.test(h)&&stat(i).avg<90)path.push(i);else secs.push(i);
   });
   return{num,text,path,secs};
@@ -296,7 +295,7 @@ function parseSheet(grid,law){
     const sections=d.secs.map(i=>({h:headers[i],v:g(i)})).filter(x=>x.v);
     const o={law,num:m?m[0]:'',numText,text:g(d.text),path,sections};
     o.norm=norm([o.text,path.join(' '),sections.map(x=>x.v).join(' ')].join(' '));
-    o.tn=norm([o.text,sections.map(x=>x.v).join(' ')].join(' '));o.pn=norm(path.join(' '));
+    o.tn=norm([o.text,sections.map(x=>x.v).join(' ')].join(' '));o.pn=norm(path.join(' ')+' '+sections.filter(x=>/عنوان|موضوع/.test(x.h)).map(x=>x.v).join(' '));
     return o;
   }).filter(o=>(o.text||o.sections.length)&&nk(o.numText)!==nk(headers[d.num]));
   const info=`شماره: ${headers[d.num]||'نامشخص'} | متن: ${headers[d.text]||'نامشخص'} | سایر: ${[...d.path,...d.secs].map(i=>headers[i]).join('، ')}`;
@@ -332,7 +331,7 @@ const b64=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
 const cKey=()=>crypto.subtle.importKey('raw',b64(KEY_B64),'AES-GCM',false,['encrypt','decrypt']);
 const pipe=async(buf,S)=>new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new S('gzip'))).arrayBuffer());
 async function sha(x){const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(x));return [...new Uint8Array(h)].map(v=>v.toString(16).padStart(2,'0')).join('');}
-function fill(o){const sv=o.sections.map(x=>x.v).join(' ');o.norm=norm([o.text,o.path.join(' '),sv].join(' '));o.tn=norm(o.text+' '+sv);o.pn=norm(o.path.join(' '));}
+function fill(o){const sv=o.sections.map(x=>x.v).join(' ');o.norm=norm([o.text,o.path.join(' '),sv].join(' '));o.tn=norm(o.text+' '+sv);o.pn=norm(o.path.join(' ')+' '+o.sections.filter(x=>/عنوان|موضوع/.test(x.h)).map(x=>x.v).join(' '));}
 function loadXLSX(){return XP||(XP=new Promise((res,rej)=>{const t=document.createElement('script');t.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';t.onload=res;t.onerror=rej;document.head.appendChild(t);}));}
 async function load(){
   try{
@@ -392,31 +391,37 @@ const CUR={re:null};
 const curH=t=>{t=disp(t);return CUR.re?t.replace(CUR.re,'<mark>$1</mark>'):t;};
 const numLabel=o=>/ماده/.test(norm(o.numText))?o.numText:'ماده '+(o.numText||'؟');
 
-/* ---------- ارجاع به ماده: در هر ستون و هر متنی، فقط خود «ماده N» لینک می‌شود و بقیهٔ کلمات دست‌نخورده می‌مانند ---------- */
-const NUM='[0-9۰-۹٠-٩]+';
-const REFSRC='(ماده|مواد)\\s*\\(?\\s*('+NUM+'(?:\\s*مکرر)?(?:\\s*(?:،|,|و|تا|الی)\\s*'+NUM+'(?:\\s*مکرر)?)*)(?:\\s*\\))?';
-// قانونِ مقصد را از کلمات بعد از شماره تشخیص می‌دهد: «تجارت»، «قانون صدور چک»، «این قانون»، یا بدون نام (همان قانون)
+/* ---------- ارجاع به ماده: فقط خود «ماده N / مواد N و M / مفاد N M» لینک می‌شود ---------- */
+const NUM='[0-9۰-۹٠-٩]+',NM=NUM+'(?:\\s*مکرر)?';
+const LISTA=NM+'(?:\\s*(?:،|,|و|تا|الی)\\s*'+NM+')*';
+const LISTB=NM+'(?:(?:\\s*(?:،|,|و|تا|الی)\\s*|\\s+)'+NM+')*';
+const REFSRC='(ماده)\\s*\\(?\\s*('+LISTA+')(?:\\s*\\))?|(مواد|مفاد)\\s*\\(?\\s*('+LISTB+')(?:\\s*\\))?';
+const STOPW=/^(و|یا|را|است|می|در|که|به|با|از|مصوب|بود|باشد|نیز|همچنین|مقرر|مذکور|مربوط|برای|تا|هم|بر|اگر|مگر|ولی|اما|پس|آمده|اشاره)$/;
+// قانونِ مقصد را از کلمات بعد از شماره تشخیص می‌دهد. نام ناقص فقط وقتی پذیرفته می‌شود که کلمهٔ بعدی بخشی از نام قانونِ دیگری نباشد
 function resolveLaws(after,curLaw){
-  const cut=after.split(/[\n،,؛;.()«»:]|ماده|مواد|تبصره|بند/)[0];
-  const ws=norm(cut).split(' ').filter(Boolean).slice(0,6);
+  const cut=after.split(/[\n،,؛;.()«»:]|ماده|مواد|مفاد|تبصره|بند/)[0];
+  const ws=norm(cut).split(' ').filter(Boolean).slice(0,7);
   if(!ws.length||/^(این|همین|فوق|مذکور|سابق|بالا)$/.test(ws[0]))return{laws:[curLaw]};
   const laws=[...new Set(DB.map(o=>o.law))],lw=l=>norm(l).split(' ');
-  const tryP=(w,strict)=>{for(let k=Math.min(w.length,5);k>=1;k--){const pre=w.slice(0,k);if(pre.length===1&&pre[0]==='قانون')continue;
-    const m=laws.filter(l=>{const lx=lw(l);if(!strict)return pre.every(x=>lx.includes(x));
-      const lz=lx.filter((x,i)=>!(i===0&&x==='قانون'));return pre.every((x,j)=>lz[j]===x);});
+  const tryP=(w,strict)=>{for(let k=Math.min(w.length,6);k>=1;k--){const pre=w.slice(0,k);if(pre.length===1&&pre[0]==='قانون')continue;
+    const next=w[k];
+    const m=laws.filter(l=>{const lx=lw(l),need=lx.filter(x=>x!=='قانون'),lz=strict?need:lx;
+      const ok=strict?pre.every((x,j)=>lz[j]===x):pre.every(x=>lx.includes(x));if(!ok)return false;
+      const complete=pre.filter(x=>need.includes(x)).length>=need.length;
+      return complete||next===undefined||STOPW.test(next);});
     if(m.length)return m;}return null;};
-  let m=tryP(ws);
+  let m=tryP(ws,false);
   if(!m&&ws[0]==='قانون')m=tryP(ws.slice(1),true);
-  if(m)return{laws:m};
-  if(ws[0]==='قانون'&&ws.length>1)return{laws:[],unknown:ws.slice(0,3).join(' ')};
+  if(m)return{laws:m.includes(curLaw)?[curLaw]:m};
+  if(/^(قانون|آیین|آئین|لایحه|قوانین)$/.test(ws[0])&&ws.length>1)return{laws:[],unknown:ws.slice(0,4).join(' ')};
   return{laws:[curLaw]};
 }
 function refChunk(m,after,curLaw){
   const info=resolveLaws(after,curLaw);
   const btn=(label,tok)=>{const n=digits(tok[1]).replace(/\D/g,'');
     return `<button type="button" class="precedent-link" data-rel-num="${esc(n)}" data-rel-mk="${tok[2]?1:0}" data-rel-laws="${esc(JSON.stringify(info.laws))}" data-rel-unknown="${esc(info.unknown||'')}" aria-expanded="false">${disp(label)}</button>`;};
-  const tr=new RegExp('('+NUM+')(\\s*مکرر)?','g'),toks=[...m[2].matchAll(tr)];
-  if(toks.length===1)return btn(m[0],toks[0]);
+  const toks=[...m[2].matchAll(new RegExp('('+NUM+')(\\s*مکرر)?','g'))];
+  if(toks.length===1)return btn(m[0].trim(),toks[0]);
   let out=disp(m[1])+' ',last=0;
   toks.forEach(t=>{out+=disp(m[2].slice(last,t.index))+btn(t[0],t);last=t.index+t[0].length;});
   return out+disp(m[2].slice(last));
@@ -426,13 +431,14 @@ function linkRefs(text,H,curLaw){
   while((m=re.exec(text))){
     out+=H(text.slice(last,m.index));
     const end=m.index+m[0].length;
-    out+=refChunk(m,text.slice(end,end+90),curLaw);last=end;
+    out+=refChunk([m[0],m[1]||m[3],m[2]||m[4]],text.slice(end,end+90),curLaw);last=end;
   }
   return out+H(text.slice(last));
 }
 function secHtml(o,H){
   return [...o.sections].sort((a,b)=>secRank(a.h)-secRank(b.h)).map(x=>{
-    const v=isPrec(x.h)?citationHtml(x.v):linkRefs(formatLegalText(x.v),H,o.law);
+    const bare=!isPrec(x.h)&&/مواد|ماده|مرتبط|ارجاع/.test(nk(x.h))&&/^[0-9۰-۹٠-٩\s،,و]+$/.test(String(x.v).trim());
+    const v=isPrec(x.h)?citationHtml(x.v):linkRefs((bare?'مواد ':'')+formatLegalText(x.v),H,o.law);
     return `<div class="sec"><h4>${esc(x.h)}</h4><div class="txt">${v}</div></div>`;
   }).join('');
 }
